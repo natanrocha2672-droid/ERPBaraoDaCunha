@@ -1,5 +1,18 @@
 import { authHeader, getBaseUrl } from './_erpnext.js';
 
+async function testResource(baseUrl, resource) {
+  try {
+    const response = await fetch(`${baseUrl}/api/resource/${encodeURIComponent(resource)}?limit_page_length=1`, {
+      headers: { Authorization: authHeader(), Accept: 'application/json' },
+      cache: 'no-store'
+    });
+    const text = await response.text();
+    return { ok: response.ok, status: response.status, error: response.ok ? null : text.slice(0, 500) };
+  } catch (error) {
+    return { ok: false, status: 0, error: error?.message || String(error) };
+  }
+}
+
 export default async function handler(req, res) {
   try {
     const hasPrimaryUrl = Boolean(process.env.ERPNEXT_BASE_URL);
@@ -13,6 +26,8 @@ export default async function handler(req, res) {
     let authOk = false;
     let apiOk = false;
     let apiError = null;
+    let company = null;
+    let item = null;
 
     try {
       baseUrl = getBaseUrl('');
@@ -24,12 +39,14 @@ export default async function handler(req, res) {
       });
       apiOk = response.ok;
       if (!response.ok) apiError = await response.text();
+      company = await testResource(baseUrl, 'Company');
+      item = await testResource(baseUrl, 'Item');
     } catch (error) {
       apiError = error?.message || String(error);
     }
 
     return res.status(200).json({
-      ok: apiOk,
+      ok: apiOk && Boolean(company?.ok) && Boolean(item?.ok),
       config: {
         hasPrimaryUrl,
         hasAltUrl,
@@ -41,6 +58,7 @@ export default async function handler(req, res) {
         authOk,
         apiOk
       },
+      permissions: { company, item },
       apiError
     });
   } catch (error) {
