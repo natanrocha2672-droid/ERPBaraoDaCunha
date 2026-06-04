@@ -1,65 +1,51 @@
 import { authHeader, getBaseUrl } from './_erpnext.js';
 
-async function testResource(baseUrl, resource) {
+function qs(fields, filters, limit = 200) {
+  const p = new URLSearchParams();
+  p.set('fields', JSON.stringify(fields));
+  if (filters) p.set('filters', JSON.stringify(filters));
+  p.set('limit_page_length', String(limit));
+  return p.toString();
+}
+
+async function testUrl(url) {
   try {
-    const response = await fetch(`${baseUrl}/api/resource/${encodeURIComponent(resource)}?limit_page_length=1`, {
+    const response = await fetch(url, {
       headers: { Authorization: authHeader(), Accept: 'application/json' },
       cache: 'no-store'
     });
     const text = await response.text();
-    return { ok: response.ok, status: response.status, error: response.ok ? null : text.slice(0, 500) };
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch {}
+    return {
+      ok: response.ok,
+      status: response.status,
+      count: Array.isArray(data?.data) ? data.data.length : null,
+      sample: Array.isArray(data?.data) ? data.data.slice(0, 3) : null,
+      error: response.ok ? null : text.slice(0, 1000)
+    };
   } catch (error) {
-    return { ok: false, status: 0, error: error?.message || String(error) };
+    return { ok: false, status: 0, count: null, sample: null, error: error?.message || String(error) };
   }
 }
 
 export default async function handler(req, res) {
   try {
-    const hasPrimaryUrl = Boolean(process.env.ERPNEXT_BASE_URL);
-    const hasAltUrl = Boolean(process.env.ERPNext_BASE_URL);
-    const hasPrimaryKey = Boolean(process.env.ERPNext_API_KEY);
-    const hasAltKey = Boolean(process.env.ERPNEXT_API_KEY);
-    const hasPrimarySecret = Boolean(process.env.ERPNext_API_SECRET);
-    const hasAltSecret = Boolean(process.env.ERPNEXT_API_SECRET);
-
-    let baseUrl = null;
-    let authOk = false;
-    let apiOk = false;
-    let apiError = null;
-    let company = null;
-    let item = null;
-
-    try {
-      baseUrl = getBaseUrl('');
-      authHeader();
-      authOk = true;
-      const response = await fetch(`${baseUrl}/api/method/frappe.auth.get_logged_user`, {
-        headers: { Authorization: authHeader(), Accept: 'application/json' },
-        cache: 'no-store'
-      });
-      apiOk = response.ok;
-      if (!response.ok) apiError = await response.text();
-      company = await testResource(baseUrl, 'Company');
-      item = await testResource(baseUrl, 'Item');
-    } catch (error) {
-      apiError = error?.message || String(error);
-    }
+    const baseUrl = getBaseUrl('');
+    const loggedUser = await testUrl(`${baseUrl}/api/method/frappe.auth.get_logged_user`);
+    const companyBasic = await testUrl(`${baseUrl}/api/resource/Company?limit_page_length=10`);
+    const itemBasic = await testUrl(`${baseUrl}/api/resource/Item?limit_page_length=10`);
+    const companyExact = await testUrl(`${baseUrl}/api/resource/Company?${qs(['name'])}`);
+    const itemExact = await testUrl(`${baseUrl}/api/resource/Item?${qs(['name','item_code','item_name','disabled'], [['disabled','=',0]], 500)}`);
 
     return res.status(200).json({
-      ok: apiOk && Boolean(company?.ok) && Boolean(item?.ok),
-      config: {
-        hasPrimaryUrl,
-        hasAltUrl,
-        hasPrimaryKey,
-        hasAltKey,
-        hasPrimarySecret,
-        hasAltSecret,
-        normalizedBaseUrl: baseUrl,
-        authOk,
-        apiOk
-      },
-      permissions: { company, item },
-      apiError
+      ok: loggedUser.ok && companyExact.ok && itemExact.ok,
+      baseUrl,
+      loggedUser,
+      companyBasic,
+      itemBasic,
+      companyExact,
+      itemExact
     });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error?.message || 'Falha no diagnóstico.' });
