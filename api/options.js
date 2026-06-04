@@ -14,11 +14,13 @@ export default async function handler(req, res) {
     const body = readBody(req);
     const baseUrl = getBaseUrl(body.baseUrl);
 
-    const [companies, items, customerGroups, territories] = await Promise.all([
+    const [companies, items, customerGroups, territories, itemGroups, uoms] = await Promise.all([
       erpFetch(baseUrl, `/api/resource/Company?${qs(['name'])}`),
-      erpFetch(baseUrl, `/api/resource/Item?${qs(['name','item_name','disabled'], [['disabled','=',0]], 500)}`),
+      erpFetch(baseUrl, `/api/resource/Item?${qs(['name','item_code','item_name','disabled'], [['disabled','=',0]], 500)}`),
       erpFetch(baseUrl, `/api/resource/Customer Group?${qs(['name','is_group'], [['is_group','=',0]])}`),
-      erpFetch(baseUrl, `/api/resource/Territory?${qs(['name','is_group'], [['is_group','=',0]])}`)
+      erpFetch(baseUrl, `/api/resource/Territory?${qs(['name','is_group'], [['is_group','=',0]])}`),
+      erpFetch(baseUrl, `/api/resource/Item Group?${qs(['name','is_group'], [['is_group','=',0]])}`),
+      erpFetch(baseUrl, `/api/resource/UOM?${qs(['name'], null, 500)}`)
     ]);
 
     return res.status(200).json({
@@ -26,7 +28,9 @@ export default async function handler(req, res) {
       companies: companies?.data || [],
       items: items?.data || [],
       customerGroups: customerGroups?.data || [],
-      territories: territories?.data || []
+      territories: territories?.data || [],
+      itemGroups: itemGroups?.data || [],
+      uoms: uoms?.data || []
     });
   } catch (error) {
     return sendError(res, error?.message || 'Não foi possível carregar os cadastros do ERPNext.', 500);
