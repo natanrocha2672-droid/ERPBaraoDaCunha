@@ -8,30 +8,28 @@ function qs(fields, filters, limit = 200) {
   return p.toString();
 }
 
+async function safeList(baseUrl, path) {
+  try {
+    const data = await erpFetch(baseUrl, path);
+    return data?.data || [];
+  } catch {
+    return [];
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return sendError(res, 'Método não permitido.', 405);
   try {
     const body = readBody(req);
     const baseUrl = getBaseUrl(body.baseUrl);
-
-    const [companies, items, customerGroups, territories, itemGroups, uoms] = await Promise.all([
-      erpFetch(baseUrl, `/api/resource/Company?${qs(['name'])}`),
-      erpFetch(baseUrl, `/api/resource/Item?${qs(['name','item_code','item_name','disabled'], [['disabled','=',0]], 500)}`),
-      erpFetch(baseUrl, `/api/resource/Customer Group?${qs(['name','is_group'], [['is_group','=',0]])}`),
-      erpFetch(baseUrl, `/api/resource/Territory?${qs(['name','is_group'], [['is_group','=',0]])}`),
-      erpFetch(baseUrl, `/api/resource/Item Group?${qs(['name','is_group'], [['is_group','=',0]])}`),
-      erpFetch(baseUrl, `/api/resource/UOM?${qs(['name'], null, 500)}`)
+    const [companies, items, customerGroups, territories] = await Promise.all([
+      safeList(baseUrl, `/api/resource/Company?${qs(['name'])}`),
+      safeList(baseUrl, `/api/resource/Item?${qs(['name','item_code','item_name','disabled'], [['disabled','=',0]], 500)}`),
+      safeList(baseUrl, `/api/resource/Customer Group?${qs(['name','is_group'], [['is_group','=',0]])}`),
+      safeList(baseUrl, `/api/resource/Territory?${qs(['name','is_group'], [['is_group','=',0]])}`)
     ]);
-
-    return res.status(200).json({
-      ok: true,
-      companies: companies?.data || [],
-      items: items?.data || [],
-      customerGroups: customerGroups?.data || [],
-      territories: territories?.data || [],
-      itemGroups: itemGroups?.data || [],
-      uoms: uoms?.data || []
-    });
+    if (!companies.length && !items.length) return sendError(res, 'Não foi possível carregar empresas nem itens do ERPNext. Verifique a URL e as permissões da API.', 500);
+    return res.status(200).json({ ok: true, companies, items, customerGroups, territories });
   } catch (error) {
     return sendError(res, error?.message || 'Não foi possível carregar os cadastros do ERPNext.', 500);
   }
