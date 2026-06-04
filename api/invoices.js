@@ -4,17 +4,30 @@ function cleanTaxId(value) {
   return value?.replace(/\D/g, '') || undefined;
 }
 
+async function findFirstLeaf(baseUrl, doctype) {
+  const fields = encodeURIComponent(JSON.stringify(['name', 'is_group']));
+  const filters = encodeURIComponent(JSON.stringify([['is_group', '=', 0]]));
+  const data = await erpFetch(baseUrl, `/api/resource/${encodeURIComponent(doctype)}?fields=${fields}&filters=${filters}&limit_page_length=1`);
+  return data?.data?.[0]?.name;
+}
+
 async function ensureCustomer(baseUrl, body) {
   const encoded = encodeURIComponent(body.customerName.trim());
   try {
     const existing = await erpFetch(baseUrl, `/api/resource/Customer/${encoded}`);
     return existing?.data?.name || body.customerName.trim();
   } catch {
+    const customerGroup = body.customerGroup?.trim() || body.companySettings?.defaultCustomerGroup?.trim() || await findFirstLeaf(baseUrl, 'Customer Group');
+    const territory = body.territory?.trim() || body.companySettings?.defaultTerritory?.trim() || await findFirstLeaf(baseUrl, 'Territory');
+
+    if (!customerGroup) throw new Error('Nenhum Customer Group final foi encontrado no ERPNext. Crie ou selecione um grupo de cliente que não seja do tipo grupo.');
+    if (!territory) throw new Error('Nenhum Territory final foi encontrado no ERPNext. Crie ou selecione um território que não seja do tipo grupo.');
+
     const doc = {
       customer_name: body.customerName.trim(),
       customer_type: body.customerType || 'Individual',
-      customer_group: 'All Customer Groups',
-      territory: 'All Territories'
+      customer_group: customerGroup,
+      territory
     };
     const taxId = cleanTaxId(body.taxId);
     if (taxId) doc.tax_id = taxId;
