@@ -13,7 +13,7 @@ export function getBaseUrl(input) {
   return url.origin;
 }
 
-function authHeader() {
+export function authHeader() {
   const key = process.env.ERPNext_API_KEY || process.env.ERPNEXT_API_KEY;
   const secret = process.env.ERPNext_API_SECRET || process.env.ERPNEXT_API_SECRET;
   if (!key || !secret) throw new Error('Configure ERPNext_API_KEY e ERPNext_API_SECRET nas variáveis de ambiente da Vercel.');
