@@ -4,10 +4,25 @@ export function sendError(res, message, status = 400, detail) {
   return res.status(status).json({ ok: false, error: message, detail });
 }
 
+function normalizeBaseUrl(value) {
+  let raw = String(value || '').trim();
+  raw = raw.replace(/^['"]+|['"]+$/g, '').trim();
+  if (!raw) return '';
+  if (!/^https?:\/\//i.test(raw)) raw = `https://${raw}`;
+  return raw.replace(/\/+$/, '');
+}
+
 export function getBaseUrl(input) {
-  const raw = (process.env.ERPNEXT_BASE_URL || process.env.ERPNext_BASE_URL || input || '').trim().replace(/\/$/, '');
+  const raw = normalizeBaseUrl(process.env.ERPNEXT_BASE_URL || process.env.ERPNext_BASE_URL || input || '');
   if (!raw) throw new Error('Informe a URL do ERPNext ou configure ERPNEXT_BASE_URL na Vercel.');
-  const url = new URL(raw);
+
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error('A URL do ERPNext é inválida. Use algo como https://suaempresa.frappe.cloud');
+  }
+
   if (url.protocol !== 'https:' && process.env.NODE_ENV === 'production') throw new Error('Por segurança, use uma URL HTTPS do ERPNext em produção.');
   if (privateHosts.test(url.hostname)) throw new Error('URL local ou privada não permitida.');
   return url.origin;
