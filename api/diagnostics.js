@@ -20,12 +20,18 @@ async function testUrl(url) {
     return {
       ok: response.ok,
       status: response.status,
-      count: Array.isArray(data?.data) ? data.data.length : null,
-      sample: Array.isArray(data?.data) ? data.data.slice(0, 3) : null,
+      contentType: response.headers.get('content-type'),
+      isJson: Boolean(data),
+      topLevelKeys: data && typeof data === 'object' ? Object.keys(data) : [],
+      countData: Array.isArray(data?.data) ? data.data.length : null,
+      countMessage: Array.isArray(data?.message) ? data.message.length : null,
+      sampleData: Array.isArray(data?.data) ? data.data.slice(0, 3) : null,
+      sampleMessage: Array.isArray(data?.message) ? data.message.slice(0, 3) : null,
+      preview: text.slice(0, 1000),
       error: response.ok ? null : text.slice(0, 1000)
     };
   } catch (error) {
-    return { ok: false, status: 0, count: null, sample: null, error: error?.message || String(error) };
+    return { ok: false, status: 0, error: error?.message || String(error) };
   }
 }
 
@@ -38,15 +44,7 @@ export default async function handler(req, res) {
     const companyExact = await testUrl(`${baseUrl}/api/resource/Company?${qs(['name'])}`);
     const itemExact = await testUrl(`${baseUrl}/api/resource/Item?${qs(['name','item_code','item_name','disabled'], [['disabled','=',0]], 500)}`);
 
-    return res.status(200).json({
-      ok: loggedUser.ok && companyExact.ok && itemExact.ok,
-      baseUrl,
-      loggedUser,
-      companyBasic,
-      itemBasic,
-      companyExact,
-      itemExact
-    });
+    return res.status(200).json({ ok: true, baseUrl, loggedUser, companyBasic, itemBasic, companyExact, itemExact });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error?.message || 'Falha no diagnóstico.' });
   }
