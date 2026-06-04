@@ -20,6 +20,19 @@ function authHeader() {
   return `token ${key}:${secret}`;
 }
 
+function extractMessage(data, status) {
+  if (data?._server_messages) {
+    try {
+      const outer = JSON.parse(data._server_messages);
+      const messages = outer.map((entry) => {
+        try { return JSON.parse(entry)?.message || entry; } catch { return entry; }
+      }).filter(Boolean);
+      if (messages.length) return messages.join(' ');
+    } catch {}
+  }
+  return data?.exception || data?.message || data?.raw || `Erro ${status} no ERPNext`;
+}
+
 export async function erpFetch(baseUrl, path, init = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
@@ -35,7 +48,7 @@ export async function erpFetch(baseUrl, path, init = {}) {
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
   if (!response.ok) {
-    const msg = data?._server_messages || data?.exception || data?.message || data?.raw || `Erro ${response.status} no ERPNext`;
+    const msg = extractMessage(data, response.status);
     throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
   }
   return data;
