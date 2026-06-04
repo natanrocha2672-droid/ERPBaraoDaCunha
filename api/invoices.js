@@ -12,6 +12,14 @@ function queryString(fields, filters, limit = 1) {
   return params.toString();
 }
 
+function normalizeItemValue(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
 async function findFirstLeaf(baseUrl, doctype) {
   const data = await erpFetch(baseUrl, `/api/resource/${encodeURIComponent(doctype)}?${queryString(['name','is_group'], [['is_group','=',0]], 1)}`);
   return data?.data?.[0]?.name;
@@ -33,7 +41,15 @@ async function resolveItemCode(baseUrl, input) {
     if (item) return item.item_code || item.name;
   }
 
-  throw new Error(`Não foi possível encontrar o item "${value}" no ERPNext. Use a seção Configurar item para criar o item ou clique em Carregar dados do ERPNext e selecione um item existente.`);
+  const allItems = await erpFetch(baseUrl, `/api/resource/Item?${queryString(['name','item_code','item_name'], [['disabled','=',0]], 1000)}`);
+  const normalizedInput = normalizeItemValue(value);
+  const matched = (allItems?.data || []).find((item) => {
+    return [item.name, item.item_code, item.item_name].some((candidate) => normalizeItemValue(candidate) === normalizedInput);
+  });
+
+  if (matched) return matched.item_code || matched.name;
+
+  throw new Error(`Não foi possível encontrar o item "${value}" no ERPNext. Clique em Carregar presets do ERPNext e selecione um item cadastrado.`);
 }
 
 async function ensureCustomer(baseUrl, body) {
