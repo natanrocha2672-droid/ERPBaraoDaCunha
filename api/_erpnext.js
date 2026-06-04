@@ -1,10 +1,10 @@
 const privateHosts = /^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.|192\.168\.|0\.|169\.254\.|::1)/i;
 
-function sendError(res, message, status = 400, detail) {
+export function sendError(res, message, status = 400, detail) {
   return res.status(status).json({ ok: false, error: message, detail });
 }
 
-function getBaseUrl(input) {
+export function getBaseUrl(input) {
   const raw = (process.env.ERPNEXT_BASE_URL || process.env.ERPNext_BASE_URL || input || '').trim().replace(/\/$/, '');
   if (!raw) throw new Error('Informe a URL do ERPNext ou configure ERPNEXT_BASE_URL na Vercel.');
   const url = new URL(raw);
@@ -20,7 +20,7 @@ function authHeader() {
   return `token ${key}:${secret}`;
 }
 
-async function erpFetch(baseUrl, path, init = {}) {
+export async function erpFetch(baseUrl, path, init = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
@@ -41,8 +41,6 @@ async function erpFetch(baseUrl, path, init = {}) {
   return data;
 }
 
-function readBody(req) {
+export function readBody(req) {
   return typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
 }
-
-module.exports = { sendError, getBaseUrl, erpFetch, readBody };
