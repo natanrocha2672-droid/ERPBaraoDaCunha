@@ -4,11 +4,36 @@ function cleanTaxId(value) {
   return value?.replace(/\D/g, '') || undefined;
 }
 
+function queryString(fields, filters, limit = 1) {
+  const params = new URLSearchParams();
+  params.set('fields', JSON.stringify(fields));
+  params.set('filters', JSON.stringify(filters));
+  params.set('limit_page_length', String(limit));
+  return params.toString();
+}
+
 async function findFirstLeaf(baseUrl, doctype) {
-  const fields = encodeURIComponent(JSON.stringify(['name', 'is_group']));
-  const filters = encodeURIComponent(JSON.stringify([['is_group', '=', 0]]));
-  const data = await erpFetch(baseUrl, `/api/resource/${encodeURIComponent(doctype)}?fields=${fields}&filters=${filters}&limit_page_length=1`);
+  const data = await erpFetch(baseUrl, `/api/resource/${encodeURIComponent(doctype)}?${queryString(['name','is_group'], [['is_group','=',0]], 1)}`);
   return data?.data?.[0]?.name;
+}
+
+async function resolveItemCode(baseUrl, input) {
+  const value = input?.trim();
+  if (!value) throw new Error('Informe o item.');
+
+  const attempts = [
+    [['item_code', '=', value]],
+    [['name', '=', value]],
+    [['item_name', '=', value]]
+  ];
+
+  for (const filters of attempts) {
+    const result = await erpFetch(baseUrl, `/api/resource/Item?${queryString(['name','item_code','item_name'], filters, 1)}`);
+    const item = result?.data?.[0];
+    if (item) return item.item_code || item.name;
+  }
+
+  throw new Error(`Não foi possível encontrar o item "${value}" no ERPNext. Use a seção Configurar item para criar o item ou clique em Carregar dados do ERPNext e selecione um item existente.`);
 }
 
 async function ensureCustomer(baseUrl, body) {
@@ -45,20 +70,21 @@ export default async function handler(req, res) {
   try {
     const body = readBody(req);
     if (!body.customerName?.trim()) return sendError(res, 'Informe o nome do cliente.');
-    if (!body.itemCode?.trim()) return sendError(res, 'Informe o código do item já cadastrado no ERPNext.');
+    if (!body.itemCode?.trim()) return sendError(res, 'Informe o item já cadastrado no ERPNext.');
     if (!body.dueDate) return sendError(res, 'Informe a data de vencimento.');
     if (!Number.isFinite(Number(body.qty)) || Number(body.qty) <= 0) return sendError(res, 'Quantidade inválida.');
     if (!Number.isFinite(Number(body.rate)) || Number(body.rate) <= 0) return sendError(res, 'Valor unitário inválido.');
 
     const baseUrl = getBaseUrl(body.baseUrl);
     const customer = await ensureCustomer(baseUrl, body);
+    const resolvedItemCode = await resolveItemCode(baseUrl, body.itemCode);
     const today = new Date().toISOString().slice(0, 10);
     const invoiceDoc = {
       customer,
       due_date: body.dueDate,
       posting_date: body.postingDate || today,
       items: [{
-        item_code: body.itemCode.trim(),
+        item_code: resolvedItemCode,
         qty: Number(body.qty),
         rate: Number(body.rate),
         description: body.description?.trim() || undefined,
@@ -90,7 +116,7 @@ export default async function handler(req, res) {
 
     const name = finalDoc?.name || created?.data?.name;
     const deskUrl = name ? `${baseUrl}/app/sales-invoice/${encodeURIComponent(name)}` : baseUrl;
-    return res.status(200).json({ ok: true, invoice: finalDoc, name, deskUrl, submitWarning });
+    return res.status(200).json({ ok: true, invoice: finalDoc, name, deskUrl, submitWarning, resolvedItemCode });
   } catch (error) {
     return sendError(res, error?.message || 'Erro ao gerar nota/fatura no ERPNext.', 500);
   }
