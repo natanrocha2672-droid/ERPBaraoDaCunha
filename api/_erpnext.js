@@ -9,11 +9,16 @@ function normalizeBaseUrl(value) {
   raw = raw.replace(/^['"]+|['"]+$/g, '').trim();
   if (!raw) return '';
   if (!/^https?:\/\//i.test(raw)) raw = `https://${raw}`;
-  return raw.replace(/\/+$/, '');
+  try {
+    const url = new URL(raw);
+    return url.origin;
+  } catch {
+    return raw.replace(/\/+$/, '');
+  }
 }
 
 export function getBaseUrl(input) {
-  const raw = normalizeBaseUrl(process.env.ERPNEXT_BASE_URL || process.env.ERPNext_BASE_URL || input || '');
+  const raw = normalizeBaseUrl(input || process.env.ERPNEXT_BASE_URL || process.env.ERPNext_BASE_URL || '');
   if (!raw) throw new Error('Informe a URL do ERPNext ou configure ERPNEXT_BASE_URL na Vercel.');
 
   let url;
@@ -65,6 +70,9 @@ export async function erpFetch(baseUrl, path, init = {}) {
   if (!response.ok) {
     const msg = extractMessage(data, response.status);
     throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+  if (data?.raw && /^\s*<!doctype html|^\s*<html/i.test(data.raw)) {
+    throw new Error('A URL informada não aponta para a API do site ERPNext. Use o domínio do site que abre o ERPNext, sem /desk ou /app.');
   }
   return data;
 }
